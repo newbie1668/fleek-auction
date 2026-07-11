@@ -8,3 +8,5 @@ dist/
 coverage/
 .worktrees/
 .superpowers/
+.vercel/
+.env.local
