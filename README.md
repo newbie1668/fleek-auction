@@ -16,8 +16,8 @@ npm run dev
 npm run verify
 ```
 
-Web: `http://localhost:5173`  
-Server health: `http://localhost:3001/api/health`
+Web: `http://localhost:5173`.  
+Server health: `http://localhost:3001/api/health`.
 
 ## Boundaries
 
