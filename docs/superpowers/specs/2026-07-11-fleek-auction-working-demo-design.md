@@ -2,7 +2,7 @@
 
 **Date:** 11 July 2026
 
-**Status:** Conversational design approved; awaiting written-spec review
+**Status:** Approved for implementation
 
 **Timebox:** Two-hour working-demo build
 
