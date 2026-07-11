@@ -16,8 +16,8 @@ npm run dev
 npm run verify
 ```
 
-Web: `http://localhost:5173`  
-Server health: `http://localhost:3001/api/health`
+Web: `http://localhost:5173`.  
+Server health: `http://localhost:3001/api/health`.
 
 On startup the server prints a presenter launchpad URL with a one-time bootstrap code. You can also open `http://localhost:5173/demo` and the launchpad will claim the presenter session.
 
