@@ -23,6 +23,19 @@ describe('auction demo state machine', () => {
     expect(state.privateMaximum).toBe(690)
   })
 
+  it('never moves the public price backwards when a custom auction starts above a rival maximum', () => {
+    let state = auctionReducer(createInitialAuctionState(), {
+      type: 'PUBLISH',
+      terms: { startPrice: 700, reservePrice: 720, buyNowPrice: 760 },
+    })
+    state = auctionReducer(state, { type: 'APPROVE_MAX', maximum: 690 })
+    state = auctionReducer(state, { type: 'SIMULATE_RIVAL', rivalMaximum: 650 })
+
+    expect(state.currentPrice).toBe(700)
+    expect(state.leader).toBe('primary')
+    expect(state.reserveMet).toBe(false)
+  })
+
   it('lets a £710 rival lead at £700 when the primary maximum is £690', () => {
     let state = auctionReducer(createInitialAuctionState(), { type: 'PUBLISH_DEFAULTS' })
     state = auctionReducer(state, { type: 'APPROVE_MAX', maximum: 690 })

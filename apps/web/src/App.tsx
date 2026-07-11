@@ -6,6 +6,13 @@ import {
   formatMoney,
   type AuctionView,
 } from './auction-demo'
+import {
+  DEFAULT_PRICE_DRAFTS,
+  parseWholePounds,
+  validateBuyerMaximum,
+  validateSellerPriceDrafts,
+  type SellerPriceErrors,
+} from './price-input'
 
 const views: { id: AuctionView; label: string }[] = [
   { id: 'seller', label: 'Seller' },
@@ -28,13 +35,20 @@ function Pill({ children, tone = 'plain' }: { children: React.ReactNode; tone?: 
   return <span className={`chip ${tone}`}>{children}</span>
 }
 
+function formatPriceDraft(value: string): string {
+  const parsed = parseWholePounds(value)
+  return parsed === null ? '—' : formatMoney(parsed)
+}
+
 export function App() {
   const [view, setView] = useState<AuctionView>('seller')
   const [state, dispatch] = useReducer(auctionReducer, undefined, createInitialAuctionState)
-  const [startPrice, setStartPrice] = useState(520)
-  const [reservePrice, setReservePrice] = useState(620)
-  const [buyNowPrice, setBuyNowPrice] = useState(760)
-  const [maximum, setMaximum] = useState(690)
+  const [startPrice, setStartPrice] = useState<string>(DEFAULT_PRICE_DRAFTS.startPrice)
+  const [reservePrice, setReservePrice] = useState<string>(DEFAULT_PRICE_DRAFTS.reservePrice)
+  const [buyNowPrice, setBuyNowPrice] = useState<string>(DEFAULT_PRICE_DRAFTS.buyNowPrice)
+  const [maximum, setMaximum] = useState<string>(DEFAULT_PRICE_DRAFTS.maximum)
+  const [sellerErrors, setSellerErrors] = useState<SellerPriceErrors>({})
+  const [maximumError, setMaximumError] = useState<string | null>(null)
   const [activityView, setActivityView] = useState<'public' | 'private'>('public')
   const [message, setMessage] = useState('Set the seller terms, then publish to start the 90-second demo.')
 
@@ -44,43 +58,80 @@ export function App() {
     return () => window.clearInterval(timer)
   }, [state.status])
 
-  const terms = { startPrice, reservePrice, buyNowPrice }
+  const sellerValidation = validateSellerPriceDrafts({ startPrice, reservePrice, buyNowPrice })
+  const activeTerms = sellerValidation.ok ? sellerValidation.terms : state.terms
+  const parsedReservePrice = parseWholePounds(reservePrice)
   const statusLabel = state.status === 'draft' ? 'DRAFT' : state.status === 'live' ? 'LIVE' : 'CLOSED'
   const countdown = state.status === 'live' ? formatCountdown(state.secondsRemaining) : state.status === 'closed' ? 'Auction ended' : 'Not published'
 
   function publish(event?: FormEvent) {
     event?.preventDefault()
-    dispatch({ type: 'PUBLISH', terms })
+    const validation = validateSellerPriceDrafts({ startPrice, reservePrice, buyNowPrice })
+    if (!validation.ok) {
+      setSellerErrors(validation.errors)
+      setMessage('Check the highlighted auction terms before publishing.')
+      return
+    }
+
+    setSellerErrors({})
+    dispatch({ type: 'PUBLISH', terms: validation.terms })
     setView('market')
     setMessage('Published. The listing is live and the countdown has started.')
   }
 
   function approveMaximum() {
-    dispatch({ type: 'APPROVE_MAX', maximum })
-    setMessage(`Maximum ${formatMoney(maximum)} approved privately. Your proxy is active.`)
+    const validation = validateBuyerMaximum(maximum, {
+      startPrice: state.terms.startPrice,
+      buyNowPrice: state.terms.buyNowPrice,
+      currentMaximum: state.privateMaximum,
+    })
+    if (!validation.ok) {
+      setMaximumError(validation.message)
+      setMessage(validation.message)
+      return
+    }
+
+    setMaximumError(null)
+    dispatch({ type: 'APPROVE_MAX', maximum: validation.maximum })
+    setMessage(`Maximum ${formatMoney(validation.maximum)} approved privately. Your proxy is active.`)
   }
 
   function prepareScenario(rivalMaximum: 650 | 710) {
-    if (state.status === 'draft') dispatch({ type: 'PUBLISH', terms })
+    if (state.status === 'draft') dispatch({ type: 'PUBLISH', terms: activeTerms })
     else dispatch({ type: 'REPLAY' })
     dispatch({ type: 'APPROVE_MAX', maximum: 690 })
     dispatch({ type: 'SIMULATE_RIVAL', rivalMaximum })
-    setMaximum(690)
+    setMaximum('690')
+    setMaximumError(null)
     setMessage(rivalMaximum === 650 ? '£650 rival simulated. The primary buyer leads at £660.' : '£710 rival simulated. The rival leads at £700.')
   }
 
   function runBuyNow() {
-    if (state.status === 'draft') dispatch({ type: 'PUBLISH', terms })
+    const closingPrice = state.status === 'draft' ? activeTerms.buyNowPrice : state.terms.buyNowPrice
+    if (state.status === 'draft') dispatch({ type: 'PUBLISH', terms: activeTerms })
     else if (state.status === 'closed') dispatch({ type: 'REPLAY' })
     dispatch({ type: 'BUY_NOW' })
-    setMessage(`Buy Now closed the auction at ${formatMoney(buyNowPrice)}. Pending Fleek QC.`)
+    setMessage(`Buy Now closed the auction at ${formatMoney(closingPrice)}. Pending Fleek QC.`)
   }
 
   function replay() {
-    if (state.status === 'draft') dispatch({ type: 'PUBLISH', terms })
+    if (state.status === 'draft') dispatch({ type: 'PUBLISH', terms: activeTerms })
     else dispatch({ type: 'REPLAY' })
     setView('demo')
     setMessage('Auction replayed from the opening price.')
+  }
+
+  function resetToSellerSetup() {
+    dispatch({ type: 'RESET_TO_SETUP' })
+    setStartPrice(DEFAULT_PRICE_DRAFTS.startPrice)
+    setReservePrice(DEFAULT_PRICE_DRAFTS.reservePrice)
+    setBuyNowPrice(DEFAULT_PRICE_DRAFTS.buyNowPrice)
+    setMaximum(DEFAULT_PRICE_DRAFTS.maximum)
+    setSellerErrors({})
+    setMaximumError(null)
+    setActivityView('public')
+    setView('seller')
+    setMessage('Demo reset. Edit the seller terms and publish again.')
   }
 
   const visibleEvents = state.events.filter((event) => activityView === 'private' || !event.private)
@@ -107,13 +158,73 @@ export function App() {
               <div className="guidance"><div className="guidance-head"><div><h2 className="section-title">Market guidance</h2><p className="section-copy">Comparable completed lots</p></div><span className="source">SYNTHETIC DEMO DATA · 12 SALES</span></div><div className="range"><div><span>Low</span><strong>£560</strong></div><div><span>Median</span><strong>£640</strong></div><div><span>High</span><strong>£720</strong></div></div><div className="range-line"/><p className="help">Sample comparable data only. You choose the final prices.</p></div>
               <div className="rule"/><h2 className="section-title">Auction terms</h2><p className="section-copy">Public values attract buyers; private rules protect your downside.</p>
               <div className="form-grid">
-                <label className="field"><span>Starting bid <small>◎ Public</small></span><span className="money-input"><b>£</b><input value={startPrice} onChange={(event) => setStartPrice(Number(event.target.value))} min="1" type="number"/></span><em>The first visible auction price.</em></label>
-                <label className="field"><span>Reserve price <small className="private-label">▣ Private to you</small></span><span className="money-input private-control"><b>£</b><input value={reservePrice} onChange={(event) => setReservePrice(Number(event.target.value))} min={startPrice} type="number"/></span><em>Your hidden minimum acceptable price.</em></label>
-                <label className="field"><span>Buy Now price <small>◎ Public</small></span><span className="money-input"><b>£</b><input value={buyNowPrice} onChange={(event) => setBuyNowPrice(Number(event.target.value))} min={reservePrice} type="number"/></span><em>Closes the auction immediately.</em></label>
+                <label className="field">
+                  <span>Starting bid <small>◎ Public</small></span>
+                  <span className={`money-input ${sellerErrors.startPrice ? 'has-error' : ''}`}>
+                    <b>£</b>
+                    <input
+                      value={startPrice}
+                      onChange={(event) => {
+                        setStartPrice(event.target.value)
+                        setSellerErrors({})
+                      }}
+                      min="1"
+                      inputMode="numeric"
+                      type="number"
+                      aria-invalid={Boolean(sellerErrors.startPrice)}
+                      aria-describedby="start-price-message"
+                    />
+                  </span>
+                  <em id="start-price-message" className={sellerErrors.startPrice ? 'field-error' : ''}>
+                    {sellerErrors.startPrice ?? 'The first visible auction price.'}
+                  </em>
+                </label>
+                <label className="field">
+                  <span>Reserve price <small className="private-label">▣ Private to you</small></span>
+                  <span className={`money-input private-control ${sellerErrors.reservePrice ? 'has-error' : ''}`}>
+                    <b>£</b>
+                    <input
+                      value={reservePrice}
+                      onChange={(event) => {
+                        setReservePrice(event.target.value)
+                        setSellerErrors({})
+                      }}
+                      min={parseWholePounds(startPrice) ?? undefined}
+                      inputMode="numeric"
+                      type="number"
+                      aria-invalid={Boolean(sellerErrors.reservePrice)}
+                      aria-describedby="reserve-price-message"
+                    />
+                  </span>
+                  <em id="reserve-price-message" className={sellerErrors.reservePrice ? 'field-error' : ''}>
+                    {sellerErrors.reservePrice ?? 'Your hidden minimum acceptable price.'}
+                  </em>
+                </label>
+                <label className="field">
+                  <span>Buy Now price <small>◎ Public</small></span>
+                  <span className={`money-input ${sellerErrors.buyNowPrice ? 'has-error' : ''}`}>
+                    <b>£</b>
+                    <input
+                      value={buyNowPrice}
+                      onChange={(event) => {
+                        setBuyNowPrice(event.target.value)
+                        setSellerErrors({})
+                      }}
+                      min={parseWholePounds(reservePrice) ?? undefined}
+                      inputMode="numeric"
+                      type="number"
+                      aria-invalid={Boolean(sellerErrors.buyNowPrice)}
+                      aria-describedby="buy-now-price-message"
+                    />
+                  </span>
+                  <em id="buy-now-price-message" className={sellerErrors.buyNowPrice ? 'field-error' : ''}>
+                    {sellerErrors.buyNowPrice ?? 'Closes the auction immediately.'}
+                  </em>
+                </label>
                 <label className="field"><span>Duration <small>◎ Public</small></span><span className="static-control">90 seconds</span><em>Bid increment: £10 for this demo.</em></label>
               </div>
             </form>
-            <aside className="card pad summary-card"><p className="eyebrow">Review</p><h2 className="section-title">Your auction rules</h2><div className="summary"><div><span>Starting bid</span><strong>{formatMoney(startPrice)}</strong></div><div><span>Private reserve</span><strong>{formatMoney(reservePrice)}</strong></div><div><span>Buy Now</span><strong>{formatMoney(buyNowPrice)}</strong></div><div><span>Estimated net at reserve</span><strong>{formatMoney(Math.round(reservePrice * .85))}</strong></div></div><div className="notice">▣ Your reserve stays hidden. Buyers only see whether it has been met.</div><button className="button primary full" onClick={() => publish()}>{state.status === 'draft' ? 'Publish auction' : 'Update & republish'}</button><p className="disclosure">Demo assumes a 15% Fleek service fee. Shipping excluded.</p></aside>
+            <aside className="card pad summary-card"><p className="eyebrow">Review</p><h2 className="section-title">Your auction rules</h2><div className="summary"><div><span>Starting bid</span><strong>{formatPriceDraft(startPrice)}</strong></div><div><span>Private reserve</span><strong>{formatPriceDraft(reservePrice)}</strong></div><div><span>Buy Now</span><strong>{formatPriceDraft(buyNowPrice)}</strong></div><div><span>Estimated net at reserve</span><strong>{parsedReservePrice === null ? '—' : formatMoney(Math.round(parsedReservePrice * .85))}</strong></div></div><div className="notice">▣ Your reserve stays hidden. Buyers only see whether it has been met.</div><button className="button primary full" onClick={() => publish()}>{state.status === 'draft' ? 'Publish auction' : 'Update & republish'}</button><p className="disclosure">Demo assumes a 15% Fleek service fee. Shipping excluded.</p></aside>
           </div>
         </section>}
 
@@ -134,7 +245,33 @@ export function App() {
             <div><div className="hero-art"><GarmentArt/></div><div className="card seller-mini"><div><strong>Thrift Kings Wholesale</strong><span>Verified supplier · 4.8 ★ · 312 orders</span></div><Pill tone="success">QC ready</Pill></div><div className="chips buyer-tags"><Pill>Exact bundle</Pill><Pill>Grade AB</Pill><Pill>50 pieces</Pill><Pill>Branded</Pill></div></div>
             <div className="card auction-panel"><div className="status-row"><div className="chips"><Pill tone={state.status === 'closed' ? 'success' : 'live'}>{statusLabel}</Pill><Pill tone={state.reserveMet ? 'success' : 'warning'}>{state.reserveMet ? 'Reserve met' : 'Reserve not met'}</Pill></div><span className="countdown">{countdown}</span></div><p className="price-label">{state.status === 'closed' ? 'Closing price' : 'Current bid'}</p><div className="current-price">{formatMoney(state.currentPrice)}</div><p className="shipping-line">{state.bidCount} {state.bidCount === 1 ? 'bid' : 'bids'} · + £48 fixed shipping</p>
               <div className="buy-row"><div><p className="price-label">Instant certainty</p><strong>Buy Now {formatMoney(state.terms.buyNowPrice)}</strong></div><button className="button yellow" onClick={runBuyNow} disabled={state.status !== 'live'}>Buy now</button></div>
-              <div className="proxy"><div className="proxy-head"><div><p className="eyebrow violet">Private buyer rule</p><h2>Let your proxy bid for you</h2></div><span className="proxy-status">{state.privateMaximum ? 'AGENT ACTIVE' : 'NOT ACTIVE'}</span></div><label className="field"><span>Your maximum <small className="private-label">▣ Private to you</small></span><span className="money-input private-control"><b>£</b><input value={maximum} onChange={(event) => setMaximum(Number(event.target.value))} type="number" aria-label="Your private maximum"/></span></label><button className="button primary full" onClick={approveMaximum} disabled={state.status !== 'live'}>Approve maximum & start proxy</button><p className="proxy-note">Fleek bids only enough to keep you leading, up to this amount. The seller and rival cannot see it.</p>{state.leader && <div className={`leading ${state.leader === 'rival' ? 'outbid' : ''}`}><div><strong>{state.leader === 'primary' ? "You're leading" : state.leader === 'rival' ? 'Rival is leading' : 'Bought instantly'}</strong><span>{state.status === 'live' ? 'Proxy activity is live' : 'Auction closed'}</span></div>{state.privateMaximum && <div><span>Your private max</span><strong>{formatMoney(state.privateMaximum)}</strong></div>}</div>}</div>
+              <div className="proxy">
+                <div className="proxy-head"><div><p className="eyebrow violet">Private buyer rule</p><h2>Let your proxy bid for you</h2></div><span className="proxy-status">{state.privateMaximum ? 'AGENT ACTIVE' : 'NOT ACTIVE'}</span></div>
+                <label className="field">
+                  <span>Your maximum <small className="private-label">▣ Private to you</small></span>
+                  <span className={`money-input private-control ${maximumError ? 'has-error' : ''}`}>
+                    <b>£</b>
+                    <input
+                      value={maximum}
+                      onChange={(event) => {
+                        setMaximum(event.target.value)
+                        setMaximumError(null)
+                      }}
+                      min={state.terms.startPrice}
+                      max={state.terms.buyNowPrice - 1}
+                      inputMode="numeric"
+                      type="number"
+                      aria-label="Your private maximum"
+                      aria-invalid={Boolean(maximumError)}
+                      aria-describedby="maximum-message"
+                    />
+                  </span>
+                  {maximumError && <em id="maximum-message" className="field-error">{maximumError}</em>}
+                </label>
+                <button className="button primary full" onClick={approveMaximum} disabled={state.status !== 'live'}>Approve maximum & start proxy</button>
+                <p className="proxy-note" id={maximumError ? undefined : 'maximum-message'}>Fleek bids only enough to keep you leading, up to this amount. The seller and rival cannot see it.</p>
+                {state.leader && <div className={`leading ${state.leader === 'rival' ? 'outbid' : ''}`}><div><strong>{state.leader === 'primary' ? "You're leading" : state.leader === 'rival' ? 'Rival is leading' : 'Bought instantly'}</strong><span>{state.status === 'live' ? 'Proxy activity is live' : 'Auction closed'}</span></div>{state.privateMaximum && <div><span>Your private max</span><strong>{formatMoney(state.privateMaximum)}</strong></div>}</div>}
+              </div>
               {state.status === 'closed' && <div className="closed"><strong>{state.closeReason === 'buy-now' ? 'Sold via Buy Now' : state.fulfilment ? 'Sold at auction' : 'Auction ended' } · {formatMoney(state.currentPrice)}</strong>{state.fulfilment && <span>{state.fulfilment}</span>}</div>}<p className="disclosure">Interactive prototype only. Payment and checkout are not processed.</p>
             </div>
             <aside className="card log-card"><div className="log-head"><h2 className="section-title">Auction activity</h2><p className="section-copy">A transparent record of every market action.</p><div className="log-tabs"><button className={activityView === 'public' ? 'active' : ''} onClick={() => setActivityView('public')}>Public</button><button className={activityView === 'private' ? 'active' : ''} onClick={() => setActivityView('private')}>Your activity</button></div></div><div className="events">{visibleEvents.length ? visibleEvents.map((event) => <div className={`event ${event.kind}`} key={event.id}><span className="event-dot"/><div><strong>{event.title}</strong><span>{event.detail}{event.private ? ' · Private' : ''}</span></div></div>) : <p className="empty-events">Publish the auction to start the activity record.</p>}</div></aside>
@@ -144,7 +281,7 @@ export function App() {
         {view === 'demo' && <section className="screen shell demo-screen">
           <div className="page-head"><p className="eyebrow violet">◇ Interactive prototype · Simulated rival</p><h1>Run the auction story</h1><p className="lead">Every control uses a deterministic in-browser state machine. No real bidder, payment, or Fleek account is involved.</p></div>
           <div className="demo-grid"><div className="demo-stage card"><div><span className="stage-label">LIVE STATE</span><Pill tone={state.status === 'closed' ? 'success' : state.status === 'live' ? 'live' : 'warning'}>{statusLabel}</Pill></div><p>50-piece Grade AB Branded Sweatshirt Lot</p><strong className="stage-price">{formatMoney(state.currentPrice)}</strong><div className="stage-meta"><span>{countdown}</span><span>{state.leader === 'primary' ? 'Primary buyer leads' : state.leader === 'rival' ? 'Rival leads' : state.leader === 'buy-now' ? 'Bought instantly' : 'Waiting for a bid'}</span></div>{state.fulfilment && <div className="qc-banner">✓ {state.fulfilment}</div>}</div>
-            <div className="card control-board"><div className="control-head"><div><p className="eyebrow">Presenter controls</p><h2>Choose a demo path</h2></div><Pill tone="private">SIMULATED RIVAL</Pill></div><div className="scenario-grid"><button onClick={() => prepareScenario(650)}><span>Baseline path</span><strong>Rival max £650</strong><em>Primary leads at £660</em></button><button onClick={() => prepareScenario(710)}><span>Alternate path</span><strong>Rival max £710</strong><em>Rival leads at £700</em></button><button onClick={runBuyNow}><span>Instant path</span><strong>Buy Now £760</strong><em>Closes immediately</em></button></div><div className="demo-actions"><button className="button primary" onClick={() => { dispatch({ type: 'CLOSE_NOW' }); setMessage('Auction closed. The winner is Pending Fleek QC.') }} disabled={state.status !== 'live' || !state.leader}>Advance to close</button><button className="button secondary" onClick={replay}>Replay auction</button><button className="text-button" onClick={() => { dispatch({ type: 'RESET_TO_SETUP' }); setView('seller'); setMessage('Demo reset. Edit the seller terms and publish again.') }}>Reset to seller setup</button></div><p className="demo-note">The rival bids are presenter controls for demonstration only. Private seller reserve and buyer maximum are never shown to the other party.</p></div>
+            <div className="card control-board"><div className="control-head"><div><p className="eyebrow">Presenter controls</p><h2>Choose a demo path</h2></div><Pill tone="private">SIMULATED RIVAL</Pill></div><div className="scenario-grid"><button onClick={() => prepareScenario(650)}><span>Baseline path</span><strong>Rival max £650</strong><em>Primary leads at £660</em></button><button onClick={() => prepareScenario(710)}><span>Alternate path</span><strong>Rival max £710</strong><em>Rival leads at £700</em></button><button onClick={runBuyNow}><span>Instant path</span><strong>Buy Now £760</strong><em>Closes immediately</em></button></div><div className="demo-actions"><button className="button primary" onClick={() => { dispatch({ type: 'CLOSE_NOW' }); setMessage('Auction closed. The winner is Pending Fleek QC.') }} disabled={state.status !== 'live' || !state.leader}>Advance to close</button><button className="button secondary" onClick={replay}>Replay auction</button><button className="text-button" onClick={resetToSellerSetup}>Reset to seller setup</button></div><p className="demo-note">The rival bids are presenter controls for demonstration only. Private seller reserve and buyer maximum are never shown to the other party.</p></div>
           </div>
         </section>}
       </main>

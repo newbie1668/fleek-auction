@@ -176,9 +176,10 @@ export function auctionReducer(state: AuctionState, action: AuctionAction): Auct
       if (state.status !== 'live') return state
       const buyerMaximum = state.privateMaximum ?? 690
       const primaryLeads = buyerMaximum >= action.rivalMaximum
-      const currentPrice = primaryLeads
+      const resolvedPrice = primaryLeads
         ? Math.min(buyerMaximum, action.rivalMaximum + 10)
         : Math.min(action.rivalMaximum, buyerMaximum + 10)
+      const currentPrice = Math.max(state.currentPrice, resolvedPrice)
       const next = {
         ...state,
         privateMaximum: buyerMaximum,
