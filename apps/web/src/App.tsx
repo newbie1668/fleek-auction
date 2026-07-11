@@ -1,32 +1,49 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { HealthStatusSchema, PingAckSchema, type HealthStatus } from '@fleek/contracts'
+import { createRequestId } from './lib/request-id'
 import { resolveScreen } from './lib/routes'
+import {
+  initialTransportStatus,
+  readHealthResponse,
+  reduceTransportStatus,
+  shouldReportHealthError,
+} from './lib/transport-health'
 import { socket } from './socket'
 
-type ConnectionState = 'connecting' | 'connected' | 'error'
-
 export function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [connection, setConnection] = useState<ConnectionState>('connecting')
+  const [modelHealth, setModelHealth] = useState<HealthStatus | null>(null)
+  const [transportStatus, dispatchTransportStatus] = useReducer(
+    reduceTransportStatus,
+    initialTransportStatus,
+  )
   const screen = resolveScreen(window.location.pathname)
 
   useEffect(() => {
     const abortController = new AbortController()
 
     fetch('/api/health', { signal: abortController.signal })
-      .then((response) => response.json())
-      .then((payload) => setHealth(HealthStatusSchema.parse(payload)))
-      .catch(() => setConnection('error'))
+      .then(readHealthResponse)
+      .then((payload) => {
+        setModelHealth(payload)
+        dispatchTransportStatus({ type: 'http:ready' })
+      })
+      .catch(() => {
+        if (shouldReportHealthError(abortController.signal)) {
+          dispatchTransportStatus({ type: 'http:error' })
+        }
+      })
 
     socket.on('system:ready', (payload) => {
-      setHealth(HealthStatusSchema.parse(payload))
-      setConnection('connected')
-      const requestId = crypto.randomUUID()
+      setModelHealth(HealthStatusSchema.parse(payload))
+      dispatchTransportStatus({ type: 'socket:connected' })
+      const requestId = createRequestId()
       socket.timeout(1_000).emit('system:ping', { requestId }, (error, response) => {
-        if (error || !PingAckSchema.safeParse(response).success) setConnection('error')
+        if (error || !PingAckSchema.safeParse(response).success) {
+          dispatchTransportStatus({ type: 'socket:error' })
+        }
       })
     })
-    socket.on('connect_error', () => setConnection('error'))
+    socket.on('connect_error', () => dispatchTransportStatus({ type: 'socket:error' }))
     socket.connect()
 
     return () => {
@@ -51,15 +68,15 @@ export function App() {
       <section className="status-grid" aria-label="Development status">
         <article>
           <span>HTTP server</span>
-          <strong>{health?.status ?? 'checking'}</strong>
+          <strong>{transportStatus.http}</strong>
         </article>
         <article>
           <span>Socket.IO</span>
-          <strong>{connection}</strong>
+          <strong>{transportStatus.socket}</strong>
         </article>
         <article>
           <span>Live model</span>
-          <strong>{health?.modelConfigured ? 'configured' : 'not configured'}</strong>
+          <strong>{modelHealth?.modelConfigured ? 'configured' : 'not configured'}</strong>
         </article>
       </section>
     </main>
