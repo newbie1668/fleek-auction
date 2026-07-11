@@ -26,6 +26,24 @@ async function startServer() {
   return { ...app, address: `http://127.0.0.1:${port}` }
 }
 
+async function connectClient(address: string) {
+  const client = createClient(address, {
+    autoConnect: false,
+    transports: ['websocket'],
+  })
+  cleanup.push(async () => {
+    client.close()
+  })
+
+  const ready = new Promise<void>((resolve) => {
+    client.once('system:ready', () => resolve())
+  })
+  client.connect()
+  await ready
+
+  return client
+}
+
 describe('server scaffold', () => {
   it('returns a schema-valid health response', async () => {
     const { address } = await startServer()
@@ -38,24 +56,41 @@ describe('server scaffold', () => {
 
   it('acknowledges a typed socket ping', async () => {
     const { address } = await startServer()
-    const client: TestClient = createClient(address, {
-      autoConnect: false,
-      transports: ['websocket'],
-    })
-    cleanup.push(async () => {
-      client.close()
-    })
-
-    const ready = new Promise<void>((resolve) => {
-      client.once('system:ready', () => resolve())
-    })
-    client.connect()
-    await ready
+    const client: TestClient = await connectClient(address)
 
     const requestId = '5e2c680d-05e7-4de5-a817-e0f8c26ffbc8'
     const response = await client.timeout(1_000).emitWithAck('system:ping', { requestId })
     const acknowledgement = PingAckSchema.parse(response)
 
     expect(acknowledgement).toMatchObject({ ok: true, requestId })
+  })
+
+  it('stays healthy after a socket ping omits the acknowledgement callback', async () => {
+    const { address } = await startServer()
+    const client = await connectClient(address)
+
+    client.emit('system:ping', {
+      requestId: '30cff1dc-5fe4-4789-aab2-17310c2e141f',
+    })
+
+    const requestId = '8157c45f-449c-492a-9388-950531750305'
+    const pingResponse = await client.timeout(1_000).emitWithAck('system:ping', { requestId })
+    expect(PingAckSchema.parse(pingResponse)).toMatchObject({ ok: true, requestId })
+
+    const healthResponse = await fetch(`${address}/api/health`)
+    expect(healthResponse.status).toBe(200)
+    expect(HealthStatusSchema.parse(await healthResponse.json()).status).toBe('ok')
+  })
+
+  it('acknowledges a malformed socket ping', async () => {
+    const { address } = await startServer()
+    const client = await connectClient(address)
+
+    const response = await client
+      .timeout(1_000)
+      .emitWithAck('system:ping', { requestId: 'not-a-uuid' })
+    const acknowledgement = PingAckSchema.parse(response)
+
+    expect(acknowledgement).toEqual({ ok: false, code: 'INVALID_PING' })
   })
 })

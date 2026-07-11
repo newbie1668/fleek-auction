@@ -35,6 +35,10 @@ export function createApp() {
   io.on('connection', (socket) => {
     socket.emit('system:ready', createHealthStatus())
     socket.on('system:ping', (payload, acknowledge) => {
+      if (typeof acknowledge !== 'function') {
+        return
+      }
+
       const parsed = PingRequestSchema.safeParse(payload)
       if (!parsed.success) {
         acknowledge({ ok: false, code: 'INVALID_PING' })
