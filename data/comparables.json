@@ -1,0 +1,14 @@
+[
+  { "id": "c01", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 52000, "evidenceType": "synthetic_demo" },
+  { "id": "c02", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "A", "lotSize": 50, "totalPricePence": 54000, "evidenceType": "synthetic_demo" },
+  { "id": "c03", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 56000, "evidenceType": "synthetic_demo" },
+  { "id": "c04", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 58000, "evidenceType": "synthetic_demo" },
+  { "id": "c05", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "A", "lotSize": 50, "totalPricePence": 62000, "evidenceType": "synthetic_demo" },
+  { "id": "c06", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 64000, "evidenceType": "synthetic_demo" },
+  { "id": "c07", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 66000, "evidenceType": "synthetic_demo" },
+  { "id": "c08", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "A", "lotSize": 50, "totalPricePence": 70000, "evidenceType": "synthetic_demo" },
+  { "id": "c09", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 72000, "evidenceType": "synthetic_demo" },
+  { "id": "c10", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "A", "lotSize": 50, "totalPricePence": 74000, "evidenceType": "synthetic_demo" },
+  { "id": "c11", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 76000, "evidenceType": "synthetic_demo" },
+  { "id": "c12", "sourceLabel": "synthetic demo row", "categoryId": "branded_sweatshirts", "grade": "AB", "lotSize": 50, "totalPricePence": 78000, "evidenceType": "synthetic_demo" }
+]
