@@ -2,5 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install",
   "buildCommand": "npm run build -w @fleek/contracts && npm run build -w @fleek/web",
-  "outputDirectory": "apps/web/dist"
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    { "source": "/demo", "destination": "/index.html" },
+    { "source": "/seller", "destination": "/index.html" },
+    { "source": "/market", "destination": "/index.html" },
+    { "source": "/buyer", "destination": "/index.html" },
+    { "source": "/rival", "destination": "/index.html" }
+  ]
 }
