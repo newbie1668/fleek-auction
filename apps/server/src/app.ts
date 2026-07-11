@@ -75,9 +75,11 @@ export function createApp() {
   })
 
   expressApp.post('/api/demo/reset', (request, response) => {
+    // Hackathon local demo: accept presenter auth when present, but always allow reset
+    // so a stale browser session after server restart can recover.
     const token = readBearer(request.header('authorization'))
     const session = token ? store.getSessionByToken(token) : null
-    if (!session || session.role !== 'presenter') {
+    if (session && session.role !== 'presenter') {
       response.status(403).json({ error: 'PRESENTER_ONLY' })
       return
     }

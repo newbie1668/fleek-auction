@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { DemoResetResponse, GuidanceResponse, HealthStatus } from '@fleek/contracts'
 import {
-  ensureSession,
   clearStoredSession,
+  readStoredSession,
+  takeBootstrapCodeFromUrl,
   writeStoredSession,
   type StoredSession,
 } from '../lib/session'
-import { SessionGate } from '../components/SessionGate'
 import { createAuthedSocket } from '../socket'
 
 interface BootstrapPayload {
@@ -14,6 +14,43 @@ interface BootstrapPayload {
   generation: number
   links: DemoResetResponse['links']
   presenterPath: string
+}
+
+async function exchangePresenter(code: string): Promise<StoredSession> {
+  const response = await fetch('/api/sessions/exchange', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrapCode: code }),
+  })
+  if (!response.ok) {
+    throw new Error('Presenter link already used. Click Reset demo fixture.')
+  }
+  const session = (await response.json()) as StoredSession
+  writeStoredSession(session, 'presenter')
+  return session
+}
+
+function codeFromPath(path: string): string | null {
+  return new URL(path, window.location.origin).searchParams.get('code')
+}
+
+async function claimPresenter(bootstrap: BootstrapPayload): Promise<StoredSession> {
+  const urlCode = takeBootstrapCodeFromUrl()
+  if (urlCode) return exchangePresenter(urlCode)
+
+  const existing = readStoredSession('presenter')
+  if (
+    existing &&
+    existing.auctionId === bootstrap.auctionId &&
+    existing.generation === bootstrap.generation
+  ) {
+    return existing
+  }
+
+  clearStoredSession('presenter')
+  const code = codeFromPath(bootstrap.presenterPath)
+  if (!code) throw new Error('Presenter bootstrap unavailable')
+  return exchangePresenter(code)
 }
 
 export function DemoLaunchpad() {
@@ -37,20 +74,26 @@ export function DemoLaunchpad() {
 
         let nextSession: StoredSession
         try {
-          nextSession = await ensureSession()
+          nextSession = await claimPresenter(bootstrap)
         } catch {
-          const code = new URL(bootstrap.presenterPath, window.location.origin).searchParams.get(
-            'code',
-          )
-          if (!code) throw new Error('Presenter bootstrap unavailable')
-          const response = await fetch('/api/sessions/exchange', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ bootstrapCode: code }),
+          // Presenter code may already be spent after a crash. Reset openly, then claim.
+          const recovered = await fetch('/api/demo/reset', { method: 'POST' })
+          if (!recovered.ok) throw new Error('Could not recover the presenter session.')
+          const payload = (await recovered.json()) as DemoResetResponse
+          clearStoredSession('presenter')
+          nextSession = await exchangePresenter(codeFromPath(payload.links.presenter)!)
+          if (cancelled) return
+          setLinks(payload.links)
+          setAuctionId(payload.auctionId)
+          setGeneration(payload.generation)
+          setSession(nextSession)
+          socket = createAuthedSocket(nextSession.token)
+          socket.on('system:ready', (payloadReady) => {
+            setHealth(payloadReady)
+            setConnected(true)
           })
-          if (!response.ok) throw new Error('Presenter exchange failed')
-          nextSession = (await response.json()) as StoredSession
-          writeStoredSession(nextSession, 'presenter')
+          socket.connect()
+          return
         }
 
         if (cancelled) return
@@ -64,9 +107,14 @@ export function DemoLaunchpad() {
           setHealth(payload)
           setConnected(true)
         })
+        socket.on('connect_error', () => {
+          clearStoredSession('presenter')
+          setConnected(false)
+          setError('Presenter session expired. Click Reset demo fixture.')
+        })
         socket.on('session:error', (payload) => {
           setError(payload.message)
-          clearStoredSession()
+          clearStoredSession('presenter')
         })
         socket.connect()
       } catch (bootError) {
@@ -85,17 +133,18 @@ export function DemoLaunchpad() {
   }, [])
 
   async function resetDemo() {
-    if (!session) return
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch('/api/demo/reset', {
-        method: 'POST',
-        headers: { authorization: `Bearer ${session.token}` },
-      })
-      if (!response.ok) throw new Error('Reset failed')
+      const headers: Record<string, string> = {}
+      if (session?.token) headers.authorization = `Bearer ${session.token}`
+      const response = await fetch('/api/demo/reset', { method: 'POST', headers })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error ? `Reset failed (${body.error})` : `Reset failed (${response.status})`)
+      }
       const payload = (await response.json()) as DemoResetResponse
-      clearStoredSession()
+      clearStoredSession('presenter')
       window.location.href = payload.links.presenter
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : 'Reset failed')
@@ -126,8 +175,8 @@ export function DemoLaunchpad() {
         <p className="kicker">Three-browser proof</p>
         <h1>Open the rooms. Clear the lot.</h1>
         <p className="lede">
-          Reset the fixture, then open seller, primary buyer, and rival buyer in separate tabs. The
-          server owns the clock, the maxima, and the settlement.
+          Start here. Click Reset if links look stale, then open Seller, Primary buyer, and Rival in
+          separate tabs using the Open links below.
         </p>
         <div className="cta-row">
           <button
@@ -144,7 +193,7 @@ export function DemoLaunchpad() {
         </div>
       </section>
 
-      {error ? <SessionGate error={error} /> : null}
+      {error ? <p className="banner error">{error}</p> : null}
 
       <section className="link-board" aria-label="Session links">
         {links ? (

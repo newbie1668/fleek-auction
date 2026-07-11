@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AuctionSnapshot, HealthStatus } from '@fleek/contracts'
 import { HealthStatusSchema } from '@fleek/contracts'
-import { ensureSession, clearStoredSession, type StoredSession } from '../lib/session'
+import { ensureSession, clearStoredSession, readStoredSession, type StoredSession } from '../lib/session'
 import { createAuthedSocket } from '../socket'
 
 export function useAuctionSession() {
@@ -17,6 +17,20 @@ export function useAuctionSession() {
 
     async function boot() {
       try {
+        // Drop stale tokens from a previous server process before claiming.
+        const bootstrap = await fetch('/api/demo/bootstrap').then((r) => r.json()) as {
+          auctionId: string
+          generation: number
+        }
+        const existing = readStoredSession()
+        if (
+          existing &&
+          (existing.auctionId !== bootstrap.auctionId ||
+            existing.generation !== bootstrap.generation)
+        ) {
+          clearStoredSession()
+        }
+
         const nextSession = await ensureSession()
         if (cancelled) return
         setSession(nextSession)
@@ -35,7 +49,8 @@ export function useAuctionSession() {
         })
         socket.on('connect_error', () => {
           setConnected(false)
-          setError('Unable to connect to the auction server.')
+          clearStoredSession()
+          setError('MISSING_SESSION')
         })
         socket.connect()
       } catch (bootError) {
