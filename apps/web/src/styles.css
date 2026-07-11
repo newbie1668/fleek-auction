@@ -198,6 +198,17 @@ a { color: inherit; }
   color: var(--danger);
 }
 
+.session-gate {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+.session-gate p {
+  margin: 0;
+  max-width: 36rem;
+}
+
 .lot-panel, .buyer-panel, .activity, .form-grid, .policy {
   margin-top: 1.5rem;
 }

@@ -1,3 +1,4 @@
+import { SessionGate } from '../components/SessionGate'
 import { useAuctionSession } from '../hooks/useAuctionSession'
 import { formatCountdown, formatMoney, statusLabel } from '../lib/format'
 
@@ -17,7 +18,7 @@ export function MarketScreen() {
         </div>
       </header>
 
-      {error ? <p className="banner error">{error}</p> : null}
+      <SessionGate error={error} />
 
       {snapshot ? (
         <>

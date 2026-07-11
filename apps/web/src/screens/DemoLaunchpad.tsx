@@ -6,6 +6,7 @@ import {
   writeStoredSession,
   type StoredSession,
 } from '../lib/session'
+import { SessionGate } from '../components/SessionGate'
 import { createAuthedSocket } from '../socket'
 
 interface BootstrapPayload {
@@ -49,7 +50,7 @@ export function DemoLaunchpad() {
           })
           if (!response.ok) throw new Error('Presenter exchange failed')
           nextSession = (await response.json()) as StoredSession
-          writeStoredSession(nextSession)
+          writeStoredSession(nextSession, 'presenter')
         }
 
         if (cancelled) return
@@ -143,7 +144,7 @@ export function DemoLaunchpad() {
         </div>
       </section>
 
-      {error ? <p className="banner error">{error}</p> : null}
+      {error ? <SessionGate error={error} /> : null}
 
       <section className="link-board" aria-label="Session links">
         {links ? (

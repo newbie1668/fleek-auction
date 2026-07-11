@@ -4,6 +4,7 @@ import {
   type GuidanceResponse,
   type SellerSnapshot,
 } from '@fleek/contracts'
+import { SessionGate } from '../components/SessionGate'
 import { useAuctionSession } from '../hooks/useAuctionSession'
 import { formatCountdown, formatMoney, statusLabel } from '../lib/format'
 import { GuidanceStrip } from './DemoLaunchpad'
@@ -57,7 +58,7 @@ export function SellerScreen() {
         </div>
       </header>
 
-      {error ? <p className="banner error">{error}</p> : null}
+      <SessionGate error={error} />
       {message ? <p className="banner">{message}</p> : null}
 
       <section className="lot-panel">
