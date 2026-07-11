@@ -32,6 +32,17 @@ describe('auction demo state machine', () => {
     expect(state.leader).toBe('rival')
   })
 
+  it('never lowers the price or flips the leader when a stopped buyer re-approves £690', () => {
+    let state = auctionReducer(createInitialAuctionState(), { type: 'PUBLISH_DEFAULTS' })
+    state = auctionReducer(state, { type: 'APPROVE_MAX', maximum: 690 })
+    state = auctionReducer(state, { type: 'SIMULATE_RIVAL', rivalMaximum: 710 })
+    state = auctionReducer(state, { type: 'APPROVE_MAX', maximum: 690 })
+
+    expect(state.currentPrice).toBe(700)
+    expect(state.leader).toBe('rival')
+    expect(state.privateMaximum).toBe(690)
+  })
+
   it('closes Buy Now exactly at the public price and sends the lot to Fleek QC', () => {
     let state = auctionReducer(createInitialAuctionState(), { type: 'PUBLISH_DEFAULTS' })
     state = auctionReducer(state, { type: 'BUY_NOW' })

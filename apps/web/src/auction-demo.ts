@@ -134,14 +134,25 @@ export function auctionReducer(state: AuctionState, action: AuctionAction): Auct
       return publish(state, DEFAULT_TERMS)
     case 'APPROVE_MAX': {
       if (state.status !== 'live') return state
-      const maximum = Math.max(state.terms.startPrice, Math.round(action.maximum))
-      const currentPrice = Math.min(maximum, Math.max(state.currentPrice, state.terms.reservePrice))
+      const maximum = Math.max(
+        state.privateMaximum ?? state.terms.startPrice,
+        state.terms.startPrice,
+        Math.round(action.maximum),
+      )
+      const rivalMaximum = state.rivalMaximum
+      const primaryLeads = rivalMaximum === null || maximum > rivalMaximum
+      const resolvedPrice = rivalMaximum === null
+        ? Math.min(maximum, Math.max(state.currentPrice, state.terms.reservePrice))
+        : primaryLeads
+          ? Math.min(maximum, rivalMaximum + 10)
+          : Math.min(rivalMaximum, maximum + 10)
+      const currentPrice = Math.max(state.currentPrice, resolvedPrice)
       return addEvents(
         {
           ...state,
           privateMaximum: maximum,
           currentPrice,
-          leader: 'primary',
+          leader: primaryLeads ? 'primary' : 'rival',
           bidCount: Math.max(1, state.bidCount),
           reserveMet: currentPrice >= state.terms.reservePrice,
         },
