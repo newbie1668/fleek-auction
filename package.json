@@ -1,0 +1,31 @@
+{
+  "name": "fleek-auction",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @fleek/contracts && concurrently -k -n contracts,server,web -c yellow,cyan,magenta \"npm run dev -w @fleek/contracts\" \"npm run dev -w @fleek/server\" \"npm run dev -w @fleek/web\"",
+    "lint": "eslint .",
+    "typecheck": "npm run build -w @fleek/contracts && npm run typecheck -w @fleek/server && npm run typecheck -w @fleek/web",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build -w @fleek/contracts && npm run build -w @fleek/server && npm run build -w @fleek/web",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.3",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0"
+  }
+}
