@@ -1,0 +1,25 @@
+{
+  "name": "@fleek/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fleek/contracts": "*",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "socket.io-client": "^4.8.3",
+    "tsx": "^4.23.0",
+    "vitest": "^4.1.10"
+  }
+}
